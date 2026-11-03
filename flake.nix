@@ -14,6 +14,7 @@
         packages = with pkgs; [
           rustc
           cargo
+          clippy
           gcc
           pkg-config
           openssl

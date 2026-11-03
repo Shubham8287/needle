@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 type Document = String;
-type Documents = HashMap<u64, Document>;
+type Documents = HashMap<DocumentId, Document>;
 
 #[derive(Eq, PartialEq, Hash, Debug)]
 struct Token(String);
@@ -12,8 +12,17 @@ impl From<&str> for Token {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+struct DocumentId(u64);
+
+impl From<u64> for DocumentId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 // Token Indexer
-type Index = HashMap<Token, Vec<u64>>;
+type Index = HashMap<Token, Vec<DocumentId>>;
 
 trait Tokenizer {
     fn tokinize(doc: &str) -> impl Iterator<Item = Token>;
@@ -36,7 +45,7 @@ struct State<T> {
 }
 
 impl<T: Tokenizer> State<T> {
-    fn add_document(&mut self, id: u64, content: String) {
+    fn add_document(&mut self, id: DocumentId, content: String) {
         let tokens = T::tokinize(&content);
         self.docs.insert(id, content.clone());
 
@@ -45,7 +54,7 @@ impl<T: Tokenizer> State<T> {
         }
     }
 
-    fn remove_document(&mut self, id: u64) {
+    fn remove_document(&mut self, id: DocumentId) {
         let Some(doc) = self.docs.remove(&id) else {
             return;
         };
@@ -62,8 +71,8 @@ impl<T: Tokenizer> State<T> {
     }
 
     // Very basic
-    fn query(&self, query: &str) -> f32 {
-        let mut m = HashMap::<u64, u32>::new();
+    fn query(&self, query: &str) -> (f32, DocumentId) {
+        let mut m = HashMap::<DocumentId, u32>::new();
         let tokens = T::tokinize(query);
 
         for token in tokens {
@@ -71,33 +80,36 @@ impl<T: Tokenizer> State<T> {
                 continue;
             };
             for doc in docs {
-                m.entry(*doc).and_modify(|v| *v += 1).or_insert(1);
+                *m.entry(*doc).or_default() += 1;
             }
         }
 
         let total_docs_touched: u32 = m.values().sum();
 
-        let most_touched_ratio = m
-            .values()
-            .map(|value| (*value as f32) / (total_docs_touched as f32))
-            .reduce(f32::max)
-            .unwrap_or_default();
-
-        most_touched_ratio
+        m.into_iter()
+        .map(|(doc, value)| ((value as f32) / (total_docs_touched as f32), doc))
+        .reduce(|arg1, arg2| { 
+            if arg1.0 < arg2.0 {
+                arg1
+            } else {
+                arg2
+            }
+        }
+        ).unwrap_or_default()
     }
 }
 
 fn main() {
     let mut state = State::<SpaceTokenizer>::default();
-    state.add_document(2, "This is second sentence".to_string());
-    state.add_document(3, "This is third after second sentence".to_string());
-    state.add_document(1, "This is first sentence".to_string());
+    state.add_document(2.into(), "This is second sentence".to_string());
+    state.add_document(3.into(), "This is third after second sentence".to_string());
+    state.add_document(1.into(), "This is first sentence".to_string());
 
-    let result = state.query("This second");
+    let result = state.query("Third second");
 
     println!("tokens: {:?}", state.index);
 
-    println!("result: {}", result);
+    println!("result: {:?}", result);
 
-    state.remove_document(1);
+    state.remove_document(1.into());
 }
