@@ -48,12 +48,12 @@ something educational.
 
 Build a working in-memory full-text search engine.
 
--   [ ] Finalize document representation and document ID management.
--   [ ] Implement a tokenizer abstraction.
--   [ ] Implement tokenization and basic normalization.
--   [ ] Build an inverted index mapping terms to document postings.
--   [ ] Support adding documents.
--   [ ] Support removing documents and cleaning up empty postings.
+-   [x ] Finalize document representation and document ID management.
+-   [x ] Implement a tokenizer abstraction.
+-   [x ] Implement tokenization and basic normalization.
+-   [x ] Build an inverted index mapping terms to document postings.
+-   [x ] Support adding documents.
+-   [x ] Support removing documents and cleaning up empty postings.
 -   [ ] Implement OR queries.
 -   [ ] Implement AND queries.
 -   [ ] Handle repeated query terms and unknown terms.

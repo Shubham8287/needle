@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 type Document = String;
 type Documents = HashMap<DocumentId, Document>;
@@ -25,14 +25,14 @@ impl From<u64> for DocumentId {
 type Index = HashMap<Token, Vec<DocumentId>>;
 
 trait Tokenizer {
-    fn tokinize(doc: &str) -> impl Iterator<Item = Token>;
+    fn tokenize(doc: &str) -> impl Iterator<Item = Token>;
 }
 
 #[derive(Default)]
 struct SpaceTokenizer;
 
 impl Tokenizer for SpaceTokenizer {
-    fn tokinize(doc: &str) -> impl Iterator<Item = Token> {
+    fn tokenize(doc: &str) -> impl Iterator<Item = Token> {
         doc.split_whitespace().map(Token::from)
     }
 }
@@ -46,7 +46,7 @@ struct State<T> {
 
 impl<T: Tokenizer> State<T> {
     fn add_document(&mut self, id: DocumentId, content: String) {
-        let tokens = T::tokinize(&content);
+        let tokens = T::tokenize(&content);
         self.docs.insert(id, content.clone());
 
         for token in tokens {
@@ -59,7 +59,7 @@ impl<T: Tokenizer> State<T> {
             return;
         };
 
-        let tokens = T::tokinize(&doc);
+        let tokens = T::tokenize(&doc);
         for token in tokens {
             let doc_lists = self.index.get_mut(&token).expect("token should present");
             doc_lists.retain(|doc_id| doc_id != &id);
@@ -71,9 +71,9 @@ impl<T: Tokenizer> State<T> {
     }
 
     // Very basic
-    fn query(&self, query: &str) -> (f32, DocumentId) {
+    fn query(&self, query: &str) -> ResultEntry {
         let mut m = HashMap::<DocumentId, u32>::new();
-        let tokens = T::tokinize(query);
+        let tokens = T::tokenize(query);
 
         for token in tokens {
             let Some(docs) = self.index.get(&token) else {
@@ -87,17 +87,68 @@ impl<T: Tokenizer> State<T> {
         let total_docs_touched: u32 = m.values().sum();
 
         m.into_iter()
-        .map(|(doc, value)| ((value as f32) / (total_docs_touched as f32), doc))
-        .reduce(|arg1, arg2| { 
-            if arg1.0 < arg2.0 {
-                arg1
-            } else {
-                arg2
-            }
-        }
-        ).unwrap_or_default()
+        .map(|(doc, value)| (doc, (value as f32) / (total_docs_touched as f32)))
+        .map(ResultEntry::from)
+        .max_by(|a, b| a.score.total_cmp(&b.score))
+        .unwrap_or_default()
     }
 }
+
+// (A and B) OR C
+// (A and ((B and (C OR D) OR E) OR F) 
+struct Query<'a> {
+    inner: &'a str,
+    and: Option<Box<Query<'a>>>,
+    or: Option<Box<Query<'a>>>,
+
+}
+
+impl <'a>Query<'a> {
+    pub fn new(query: &'a str) -> Self {
+        Self { inner: query , and: None, or: None}
+    }
+
+    pub fn and<'b>(&'b mut self, query: &'a str) -> &'b mut Query<'a> {
+        assert!(self.and.is_none());
+        self.and = Some(Query::<'a>::new(query).into());
+        self.and.as_deref_mut().unwrap()
+    }
+
+    pub fn or<'b>(&'b mut self, query: &'a str) -> &'b mut Query<'a> {
+        assert!(self.or.is_none());
+        self.or = Some(Query::<'a>::new(query).into());
+        self.or.as_deref_mut().unwrap()
+    }
+}
+impl <'a> Display for Query<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+          f.write_fmt(format_args!("({}", self.inner))?;
+
+        if let Some(and) = self.and.as_ref() {
+            f.write_fmt(format_args!(" AND {}", and))?;
+        }
+        if let Some(or) = self.or.as_ref() {
+            f.write_fmt(format_args!(" OR {}", or))?;
+        }
+
+        write!(f, ")")?;
+
+        Ok(())
+    }
+}
+
+#[derive( Debug, PartialEq, Default )]
+struct ResultEntry{
+    doc: DocumentId,
+    score: f32,
+}
+
+impl From<(DocumentId, f32)> for ResultEntry {
+    fn from(value: (DocumentId, f32)) -> Self {
+        ResultEntry { doc: value.0, score: value.1 }
+    }
+}
+
 
 fn main() {
     let mut state = State::<SpaceTokenizer>::default();
@@ -106,6 +157,17 @@ fn main() {
     state.add_document(1.into(), "This is first sentence".to_string());
 
     let result = state.query("Third second");
+    // (This AND (After OR (first)) OR is)
+    let mut query = Query::new("This");
+    query.and("after").or("first");
+    query.or("is");
+
+    let result = format!("{}", query);
+    assert_eq!(result, "(This AND (after OR (first)) OR (is))");
+
+
+
+
 
     println!("tokens: {:?}", state.index);
 
