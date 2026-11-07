@@ -47,6 +47,7 @@ struct State<T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
+#[cfg(test)]
 impl<T: Tokenizer> State<T> {
     fn add_document(&mut self, id: DocumentId, content: String) {
         let tokens = T::tokenize(&content);
@@ -73,18 +74,21 @@ impl<T: Tokenizer> State<T> {
         }
     }
 
-    fn calculate_score(idx: PartialResult) -> Vec<ResultEntry> {
+    fn calculate_score(idx: DocFreq) -> Vec<Score> {
         let total_docs_touched: u32 = idx.values().sum();
+
+        println!("result {:?}", idx);
 
         idx.into_iter()
             .map(|(doc, value)| (doc, (value as f32) / (total_docs_touched as f32)))
-            .map(ResultEntry::from)
-            .collect::<Vec<ResultEntry>>()
+            .rev()
+            .map(Score::from)
+            .collect::<Vec<Score>>()
     }
 
     // Very basic
-    fn query(&self, query: &str) -> Vec<ResultEntry> {
-        let mut m = PartialResult::new();
+    fn query(&self, query: &str) -> Vec<Score> {
+        let mut m = DocFreq::new();
         let tokens = T::tokenize(query);
 
         for token in tokens {
@@ -99,13 +103,13 @@ impl<T: Tokenizer> State<T> {
         Self::calculate_score(m)
     }
 
-    fn search(&self, query: &Query) -> Vec<ResultEntry> {
+    fn search(&self, query: &Query) -> Vec<Score> {
         let mut res = Vec::new();
 
         res
     }
 }
-type PartialResult = BTreeMap<DocumentId, u32>;
+type DocFreq = BTreeMap<DocumentId, u32>;
 // (A and B) OR C
 // (A and ((B and (C OR D) OR E) OR F)
 struct Query<'a> {
@@ -153,14 +157,14 @@ impl<'a> Display for Query<'a> {
 }
 
 #[derive(Debug, PartialEq, Default)]
-struct ResultEntry {
+struct Score {
     doc: DocumentId,
     score: f32,
 }
 
-impl From<(DocumentId, f32)> for ResultEntry {
+impl From<(DocumentId, f32)> for Score {
     fn from(value: (DocumentId, f32)) -> Self {
-        ResultEntry {
+        Score {
             doc: value.0,
             score: value.1,
         }
@@ -195,18 +199,18 @@ mod test {
         state.add_document(3.into(), "This is third after second sentence".to_string());
         state.add_document(1.into(), "This is first sentence".to_string());
 
-        let result = state.query("Third second");
+        let result = state.query("third second");
 
         println!("{:?}", result);
 
         let fixture = vec![
-            ResultEntry {
-                doc: DocumentId(2),
-                score: 0.5,
-            },
-            ResultEntry {
+           Score {
                 doc: DocumentId(3),
-                score: 0.5,
+                score: 0.6666667,
+            },
+             Score {
+                doc: DocumentId(2),
+                score: 0.33333334,
             },
         ];
 
