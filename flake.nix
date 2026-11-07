@@ -18,6 +18,7 @@
           gcc
           pkg-config
           openssl
+          rustup
         ];
       };
     };
