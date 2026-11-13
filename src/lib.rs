@@ -7,7 +7,7 @@ type Document = String;
 type Documents = HashMap<DocumentId, Document>;
 
 #[derive(Eq, PartialEq, Hash, Debug)]
-struct Token(String);
+pub struct Token(String);
 
 impl From<&str> for Token {
     fn from(value: &str) -> Self {
@@ -16,7 +16,7 @@ impl From<&str> for Token {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug, Default)]
-struct DocumentId(u64);
+pub struct DocumentId(u64);
 
 impl From<u64> for DocumentId {
     fn from(value: u64) -> Self {
@@ -27,12 +27,12 @@ impl From<u64> for DocumentId {
 // Token Indexer
 type Index = HashMap<Token, Vec<DocumentId>>;
 
-trait Tokenizer {
+pub trait Tokenizer {
     fn tokenize(doc: &str) -> impl Iterator<Item = Token>;
 }
 
 #[derive(Default)]
-struct SpaceTokenizer;
+pub struct SpaceTokenizer;
 
 impl Tokenizer for SpaceTokenizer {
     fn tokenize(doc: &str) -> impl Iterator<Item = Token> {
@@ -41,15 +41,14 @@ impl Tokenizer for SpaceTokenizer {
 }
 
 #[derive(Default, Debug)]
-struct State<T> {
+pub struct State<T> {
     index: Index,
     docs: Documents,
     _phantom: std::marker::PhantomData<T>,
 }
 
-#[cfg(test)]
 impl<T: Tokenizer> State<T> {
-    fn add_document(&mut self, id: DocumentId, content: String) {
+    pub fn add_document(&mut self, id: DocumentId, content: String) {
         let tokens = T::tokenize(&content);
         self.docs.insert(id, content.clone());
 
@@ -58,7 +57,7 @@ impl<T: Tokenizer> State<T> {
         }
     }
 
-    fn remove_document(&mut self, id: DocumentId) {
+    pub fn remove_document(&mut self, id: DocumentId) {
         let Some(doc) = self.docs.remove(&id) else {
             return;
         };
@@ -86,8 +85,8 @@ impl<T: Tokenizer> State<T> {
             .collect::<Vec<Score>>()
     }
 
-    // Very basic
-    fn query(&self, query: &str) -> Vec<Score> {
+    // Very basic lexical search
+    pub fn query(&self, query: &str) -> Vec<Score> {
         let mut m = DocFreq::new();
         let tokens = T::tokenize(query);
 
@@ -103,7 +102,8 @@ impl<T: Tokenizer> State<T> {
         Self::calculate_score(m)
     }
 
-    fn search(&self, query: &Query) -> Vec<Score> {
+    // Takes `Query` as input
+    pub fn search(&self, query: &Query) -> Vec<Score> {
         let mut res = Vec::new();
 
         res
@@ -112,7 +112,7 @@ impl<T: Tokenizer> State<T> {
 type DocFreq = BTreeMap<DocumentId, u32>;
 // (A and B) OR C
 // (A and ((B and (C OR D) OR E) OR F)
-struct Query<'a> {
+pub struct Query<'a> {
     inner: &'a str,
     and: Option<Box<Query<'a>>>,
     or: Option<Box<Query<'a>>>,
@@ -157,7 +157,7 @@ impl<'a> Display for Query<'a> {
 }
 
 #[derive(Debug, PartialEq, Default)]
-struct Score {
+pub struct Score {
     doc: DocumentId,
     score: f32,
 }
@@ -171,37 +171,23 @@ impl From<(DocumentId, f32)> for Score {
     }
 }
 
-fn main() {
-    let mut state = State::<SpaceTokenizer>::default();
-    // (This AND (After OR (first)) OR is)
-    let mut query = Query::new("This");
-    query.and("after").or("first");
-    query.or("is");
-
-    let result = format!("{}", query);
-    assert_eq!(result, "(This AND (after OR (first)) OR (is))");
-
-    println!("tokens: {:?}", state.index);
-
-    println!("result: {:?}", result);
-
-    state.remove_document(1.into());
-}
 
 #[cfg(test)]
 mod test {
     use crate::*;
 
-    #[test]
-    fn test_document_retrival() {
-        let mut state = State::<SpaceTokenizer>::default();
+    fn init_state() -> State<SpaceTokenizer> {
+    let mut state = State::<SpaceTokenizer>::default();
         state.add_document(2.into(), "This is second sentence".to_string());
         state.add_document(3.into(), "This is third after second sentence".to_string());
         state.add_document(1.into(), "This is first sentence".to_string());
+        state
+    }
 
+    #[test]
+    fn test_document_retrival() {
+        let state = init_state();
         let result = state.query("third second");
-
-        println!("{:?}", result);
 
         let fixture = vec![
            Score {
@@ -217,5 +203,22 @@ mod test {
         for (result, fixture ) in result.into_iter().zip(fixture) {
             assert_eq!(result, fixture);
         }
+    }
+
+    #[test]
+    fn test_query_builder() {
+    // (This AND (After OR (first)) OR is)
+    let mut query = Query::new("This");
+    query.and("after").or("first");
+    query.or("is");
+
+    let result = format!("{}", query);
+    assert_eq!(result, "(This AND (after OR (first)) OR (is))");
+    }
+
+    #[cfg(test)]
+    fn test_query_builder_search() {
+        let mut state = init_state();
+
     }
 }
