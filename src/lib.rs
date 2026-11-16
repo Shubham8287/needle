@@ -1,6 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Display,
+    alloc::{Allocator, GlobalAlloc}, collections::{BTreeMap, HashMap}, fmt::Display,
 };
 
 type Document = String;
@@ -156,7 +155,34 @@ impl<'a> Display for Query<'a> {
     }
 }
 
+
+struct Arena {
+    inner: Box<[u8]>,
+}
+
+impl <const T: u32>Arena<T> {
+
+    fn new(capacity: usize) -> Self {
+        Self {
+            inner: Box::new([0; capacity]),
+        }
+    }
+}
+
+pub struct MyAlloc {}
+unsafe impl Allocator for MyAlloc {
+    fn allocate(&self, layout: std::alloc::Layout) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        println!("layout {:?}", layout);
+        todo!();
+    }
+
+    unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, layout: std::alloc::Layout) {
+        todo!()
+    }
+}
+
 #[derive(Debug, PartialEq, Default)]
+#[repr(C, packed)]
 pub struct Score {
     doc: DocumentId,
     score: f32,
@@ -182,6 +208,13 @@ mod test {
         state.add_document(3.into(), "This is third after second sentence".to_string());
         state.add_document(1.into(), "This is first sentence".to_string());
         state
+    }
+
+    #[test]
+    fn test_alloc() {
+        let aloc = MyAlloc{};
+        let mut v: Vec<Score, MyAlloc> =  Vec::<Score, MyAlloc>::new_in(aloc);
+       v.push(Score { doc: DocumentId::default(), score: 0.1 });
     }
 
     #[test]
